@@ -1,0 +1,8 @@
+.env
+env
+*env
+target/
+backend/target/
+backend/.m2/
+uploads/
+backend/uploads/
