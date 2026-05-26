@@ -65,6 +65,23 @@ const labels = {
   SAIDA: 'Saída'
 };
 
+const financeCategories = [
+  ['Venda de veículo', 'Venda de veículo'],
+  ['Sinal ou reserva', 'Sinal ou reserva'],
+  ['Financiamento', 'Financiamento'],
+  ['Comissão recebida', 'Comissão recebida'],
+  ['Reembolso', 'Reembolso'],
+  ['Compra de veículo', 'Compra de veículo'],
+  ['Manutenção', 'Manutenção'],
+  ['Documentação', 'Documentação'],
+  ['Impostos e taxas', 'Impostos e taxas'],
+  ['Salários', 'Salários'],
+  ['Comissão paga', 'Comissão paga'],
+  ['Marketing', 'Marketing'],
+  ['Aluguel e contas', 'Aluguel e contas'],
+  ['Outros', 'Outros']
+];
+
 const icons = {
   car: '<svg viewBox="0 0 24 24"><path d="M5 17h14l-1.4-5.6A3 3 0 0 0 14.7 9H9.3a3 3 0 0 0-2.9 2.4L5 17Z"/><path d="M7 17v2M17 17v2M6 13h12M8 9l1-3h6l1 3"/></svg>',
   user: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>',
@@ -111,8 +128,21 @@ document.addEventListener('submit', (event) => {
 document.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]');
   if (!action) return;
+  if ((action.classList.contains('modal-backdrop') || action.classList.contains('confirm-backdrop')) && event.target !== action) {
+    return;
+  }
   event.preventDefault();
   handleAction(action);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (state.modal) closeModal();
+  if (state.confirm) closeConfirm();
+  if (state.menuOpen) {
+    state.menuOpen = false;
+    render();
+  }
 });
 
 document.addEventListener('change', (event) => {
@@ -777,7 +807,7 @@ function financeiroModal() {
     <form id="modalForm" class="form-grid two" data-form="financeiro">
       ${hidden('id', item.id)}
       ${select('tipo', 'Tipo', item.tipo || 'ENTRADA', [['ENTRADA', 'Entrada'], ['SAIDA', 'Saída']])}
-      ${input('categoria', 'Categoria', item.categoria || '', 'text', true)}
+      ${selectWithCustom('categoria', 'Categoria', item.categoria || '', financeCategories, true)}
       ${input('descricao', 'Descrição', item.descricao || '', 'text', true)}
       ${input('valor', 'Valor', item.valor || '', 'number', true, '0.01')}
       ${input('dataMovimento', 'Data', item.dataMovimento || today(), 'date', true)}
@@ -788,7 +818,7 @@ function financeiroModal() {
 
 function modalShell(title, body, footer) {
   return `
-    <div class="modal-backdrop">
+    <div class="modal-backdrop" data-action="close-modal">
       <section class="modal" role="dialog" aria-modal="true">
         <header class="modal-head">
           <h2 class="modal-title">${title}</h2>
@@ -803,7 +833,7 @@ function modalShell(title, body, footer) {
 
 function renderConfirm() {
   return `
-    <div class="confirm-backdrop">
+    <div class="confirm-backdrop" data-action="cancel-confirm">
       <section class="confirm" role="dialog" aria-modal="true">
         <header class="confirm-head"><h2 class="confirm-title">${escapeHtml(state.confirm.title)}</h2></header>
         <div class="confirm-body">${escapeHtml(state.confirm.message)}</div>
@@ -1399,6 +1429,23 @@ function select(name, label, value, items) {
       <label for="${name}">${label}</label>
       <select id="${name}" name="${name}">
         ${items.map(([itemValue, itemLabel]) => option(itemValue, itemLabel, value)).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function selectWithCustom(name, label, value, items, required = false) {
+  const knownValue = items.some(([itemValue]) => String(itemValue) === String(value));
+  const options = knownValue || !value
+    ? items
+    : [[value, `${value} (atual)`]].concat(items);
+
+  return `
+    <div class="field">
+      <label for="${name}">${label}</label>
+      <select id="${name}" name="${name}" ${required ? 'required' : ''}>
+        ${option('', 'Selecione uma categoria', value)}
+        ${options.map(([itemValue, itemLabel]) => option(itemValue, itemLabel, value)).join('')}
       </select>
     </div>
   `;
