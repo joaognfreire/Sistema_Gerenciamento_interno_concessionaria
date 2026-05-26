@@ -151,6 +151,12 @@ document.addEventListener('change', (event) => {
   handleChange(field);
 });
 
+document.addEventListener('input', (event) => {
+  const field = event.target.closest('[data-money]');
+  if (!field) return;
+  formatMoneyField(field);
+});
+
 async function handleForm(form) {
   const name = form.dataset.form;
   try {
@@ -647,7 +653,7 @@ function colaboradorModal() {
       ${input('telefone', 'Telefone', item.telefone)}
       ${input('dataNascimento', 'Nascimento', item.dataNascimento, 'date')}
       ${input('dataAdmissao', 'Admissão', item.dataAdmissao || today(), 'date', true)}
-      ${input('salario', 'Salário', item.salario || 0, 'number', true, '0.01')}
+      ${moneyInput('salario', 'Salário', item.salario ?? 0, true)}
       ${editing ? select('ativo', 'Status', String(item.ativo), [['true', 'Ativo'], ['false', 'Inativo']]) : ''}
     </form>
   `, `<button class="button" data-action="close-modal">Cancelar</button><button class="button primary" form="modalForm">${icon('save')}Salvar</button>`);
@@ -689,8 +695,8 @@ function carroModal() {
         ['VENDIDO', 'Vendido'],
         ['MANUTENCAO', 'Manutenção']
       ])}
-      ${input('valorCompra', 'Valor de compra', values.valorCompra || 0, 'number', true, '0.01')}
-      ${input('valorVenda', 'Valor de venda', values.valorVenda || '', 'number', false, '0.01')}
+      ${moneyInput('valorCompra', 'Valor de compra', values.valorCompra ?? 0, true)}
+      ${moneyInput('valorVenda', 'Valor de venda', values.valorVenda ?? '', false)}
       ${input('dataCompra', 'Data de compra', values.dataCompra || today(), 'date', true)}
       ${input('dataVenda', 'Data de venda', values.dataVenda, 'date')}
       <div class="field full-span">
@@ -810,7 +816,7 @@ function financeiroModal() {
       ${select('tipo', 'Tipo', item.tipo || 'ENTRADA', [['ENTRADA', 'Entrada'], ['SAIDA', 'Saída']])}
       ${selectWithCustom('categoria', 'Categoria', item.categoria || '', financeCategories, true)}
       ${input('descricao', 'Descrição', item.descricao || '', 'text', true)}
-      ${input('valor', 'Valor', item.valor || '', 'number', true, '0.01')}
+      ${moneyInput('valor', 'Valor', item.valor ?? '', true)}
       ${input('dataMovimento', 'Data', item.dataMovimento || today(), 'date', true)}
       ${select('carroId', 'Carro relacionado', item.carroId || '', carOptions)}
     </form>
@@ -1445,6 +1451,15 @@ function input(name, label, value = '', type = 'text', required = false, step = 
   `;
 }
 
+function moneyInput(name, label, value = '', required = false) {
+  return `
+    <div class="field">
+      <label for="${name}">${label}</label>
+      <input id="${name}" name="${name}" type="text" inputmode="decimal" autocomplete="off" data-money value="${escapeAttr(formatMoneyInput(value))}" ${required ? 'required' : ''}>
+    </div>
+  `;
+}
+
 function hidden(name, value) {
   return value ? `<input type="hidden" name="${name}" value="${escapeAttr(value)}">` : '';
 }
@@ -1704,12 +1719,94 @@ function number(value) {
 }
 
 function toNumber(value) {
-  return value === '' || value === null || value === undefined ? null : Number(value);
+  if (value === '' || value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/[^\d,.-]/g, '');
+  const hasComma = cleaned.includes(',');
+  const normalized = hasComma
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned.replace(/^-?\d{1,3}(\.\d{3})+$/, (match) => match.replace(/\./g, ''));
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function toFiniteNumber(value) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoneyField(field) {
+  const snapshot = getMoneyCaretSnapshot(field);
+  field.value = formatMoneyTyping(field.value);
+  restoreMoneyCaret(field, snapshot);
+}
+
+function getMoneyCaretSnapshot(field) {
+  const cursor = field.selectionStart ?? field.value.length;
+  const value = field.value;
+  const commaIndex = value.indexOf(',');
+  if (commaIndex >= 0 && cursor > commaIndex) {
+    return {
+      section: 'decimal',
+      digits: value.slice(commaIndex + 1, cursor).replace(/\D/g, '').length
+    };
+  }
+  return {
+    section: 'integer',
+    digits: value.slice(0, cursor).replace(/\D/g, '').length
+  };
+}
+
+function restoreMoneyCaret(field, snapshot) {
+  if (typeof field.setSelectionRange !== 'function') return;
+  const value = field.value;
+  const commaIndex = value.indexOf(',');
+  if (snapshot.section === 'decimal') {
+    const start = commaIndex >= 0 ? commaIndex + 1 : value.length;
+    let seen = 0;
+    for (let index = start; index < value.length; index += 1) {
+      if (/\d/.test(value[index])) seen += 1;
+      if (seen >= snapshot.digits) {
+        field.setSelectionRange(index + 1, index + 1);
+        return;
+      }
+    }
+    field.setSelectionRange(value.length, value.length);
+    return;
+  }
+
+  if (snapshot.digits === 0) {
+    field.setSelectionRange(0, 0);
+    return;
+  }
+  const limit = commaIndex >= 0 ? commaIndex : value.length;
+  let seen = 0;
+  for (let index = 0; index < limit; index += 1) {
+    if (/\d/.test(value[index])) seen += 1;
+    if (seen >= snapshot.digits) {
+      field.setSelectionRange(index + 1, index + 1);
+      return;
+    }
+  }
+  field.setSelectionRange(limit, limit);
+}
+
+function formatMoneyInput(value) {
+  const parsed = toNumber(value);
+  if (parsed === null) return '';
+  return parsed.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function formatMoneyTyping(value) {
+  const raw = String(value || '').replace(/[^\d,]/g, '');
+  const commaIndex = raw.indexOf(',');
+  const hasComma = commaIndex >= 0;
+  const integerPart = (hasComma ? raw.slice(0, commaIndex) : raw).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  const decimalPart = hasComma ? raw.slice(commaIndex + 1).replace(/\D/g, '').slice(0, 2) : '';
+  const formattedInteger = integerPart ? integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+  if (hasComma) return `${formattedInteger || '0'},${decimalPart}`;
+  return formattedInteger;
 }
 
 function today() {
