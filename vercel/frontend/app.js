@@ -557,6 +557,7 @@ function renderRelatorios() {
         <button class="button" data-action="view-relatorio" data-id="${item.id}">${icon('eye')}Detalhes</button>
         ${canManage() && !item.apagado ? `<button class="button" data-action="edit-relatorio" data-id="${item.id}">${icon('edit')}Editar</button>` : ''}
         ${canManage() && !item.apagado && item.status === 'PENDENTE' ? `<button class="button" data-action="status-relatorio" data-id="${item.id}" data-status="EM_ANALISE">${icon('check')}Análise</button>` : ''}
+        ${canManage() && !item.apagado && item.status === 'EM_ANALISE' ? `<button class="button" data-action="status-relatorio" data-id="${item.id}" data-status="RESOLVIDO">${icon('check')}Concluir</button>` : ''}
         ${canManage() && !item.apagado && item.status !== 'ARQUIVADO' ? `<button class="button" data-action="responder-relatorio" data-id="${item.id}">${icon('edit')}Responder</button>` : ''}
         ${isOwner() && !item.apagado && item.status !== 'ARQUIVADO' ? `<button class="button" data-action="arquivar-relatorio" data-id="${item.id}">${icon('archive')}Arquivar</button>` : ''}
         ${canDeleteRelatorio(item) ? `<button class="button danger" data-action="delete-relatorio" data-id="${item.id}">${icon('trash')}Apagar</button>` : ''}
@@ -879,6 +880,9 @@ async function submitLogin(form) {
 
 async function submitColaborador(form) {
   const data = formData(form);
+  if (!isValidCpf(data.cpf)) {
+    throw new Error('CPF inválido. Confira os dígitos informados.');
+  }
   const payload = {
     nome: data.nome,
     cpf: onlyDigits(data.cpf),
@@ -1865,6 +1869,25 @@ function formatCpf(value) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function isValidCpf(value) {
+  const cpf = onlyDigits(value);
+  if (cpf.length !== 11) return false;
+  if (/^(\d)\1+$/.test(cpf)) return false;
+
+  const firstDigit = cpfVerificationDigit(cpf, 9, 10);
+  const secondDigit = cpfVerificationDigit(cpf, 10, 11);
+  return firstDigit === Number(cpf[9]) && secondDigit === Number(cpf[10]);
+}
+
+function cpfVerificationDigit(cpf, length, weight) {
+  let sum = 0;
+  for (let index = 0; index < length; index += 1) {
+    sum += Number(cpf[index]) * (weight - index);
+  }
+  const remainder = (sum * 10) % 11;
+  return remainder === 10 ? 0 : remainder;
+}
+
 function formatPhone(value) {
   const digits = onlyDigits(value).slice(0, 11);
   if (!digits) return '';
@@ -1898,8 +1921,9 @@ function formatDateTime(value) {
 function assetUrl(url) {
   if (!url) return '';
   if (url.startsWith('http')) return url;
+  if (url.startsWith('/uploads/')) return `${normalizeApiBase(state.apiBase || API_DEFAULT)}${url}`;
   try {
-    return `${new URL(state.apiBase).origin}${url}`;
+    return `${new URL(state.apiBase, window.location.origin).origin}${url}`;
   } catch {
     return url;
   }

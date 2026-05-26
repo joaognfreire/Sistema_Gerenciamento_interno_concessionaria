@@ -172,7 +172,7 @@ public class RelatorioService {
                 INSERT INTO resposta_relatorio (id_relatorio, id_colaborador, mensagem, data_resposta)
                 VALUES (?, ?, ?, ?)
                 """, id, user.id(), resposta.trim(), Timestamp.valueOf(LocalDateTime.now()));
-        jdbcTemplate.update("UPDATE relatorio SET status = 'Resolvido' WHERE id_relatorio = ?", id);
+        jdbcTemplate.update("UPDATE relatorio SET status = ? WHERE id_relatorio = ?", StatusRelatorio.EM_ANALISE.dbValue(), id);
 
         return findById(id);
     }
