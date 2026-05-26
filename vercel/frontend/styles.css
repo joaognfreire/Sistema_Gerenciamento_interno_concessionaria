@@ -469,6 +469,223 @@ textarea:disabled {
   font-size: 14px;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.35fr) repeat(2, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.dashboard-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  box-shadow: 0 8px 24px rgba(15, 28, 45, 0.05);
+}
+
+.dashboard-card.featured {
+  background: linear-gradient(135deg, #ffffff 0%, #f4faf8 100%);
+}
+
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.chart-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.chart-subtitle {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.donut-layout {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.donut-chart {
+  width: 170px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--success) 0 var(--slice), var(--danger) var(--slice) 360deg);
+  position: relative;
+}
+
+.donut-chart::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.donut-center {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  max-width: 112px;
+}
+
+.donut-center span,
+.mini-kpis span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.donut-center strong {
+  font-size: 16px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.donut-center strong.success {
+  color: var(--success);
+}
+
+.donut-center strong.danger {
+  color: var(--danger);
+}
+
+.chart-legend {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chart-legend.compact {
+  gap: 8px;
+}
+
+.legend-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend-row strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.legend-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.legend-dot.success,
+.progress-fill.success,
+.stack.success {
+  background: var(--success);
+}
+
+.legend-dot.danger,
+.progress-fill.danger {
+  background: var(--danger);
+}
+
+.legend-dot.warning,
+.progress-fill.warning,
+.stack.warning {
+  background: #d7a422;
+}
+
+.stacked-bar,
+.progress-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.stacked-bar {
+  display: flex;
+}
+
+.stack {
+  min-width: 0;
+}
+
+.bar-list {
+  display: grid;
+  gap: 12px;
+}
+
+.bar-row {
+  display: grid;
+  gap: 6px;
+}
+
+.bar-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bar-meta strong {
+  color: var(--text);
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.mini-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-kpis div {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fbfcfe;
+  padding: 10px;
+}
+
+.mini-kpis strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+}
+
 .full-span {
   grid-column: 1 / -1;
 }
@@ -962,6 +1179,18 @@ td.wrap {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .donut-layout {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .donut-chart {
+    width: 150px;
+  }
+
   .sidebar {
     position: fixed;
     z-index: 40;
@@ -1033,6 +1262,14 @@ td.wrap {
 
   .button {
     white-space: normal;
+  }
+
+  .donut-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .donut-chart {
+    justify-self: center;
   }
 
   .row-actions {

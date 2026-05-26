@@ -362,6 +362,7 @@ function renderDashboard() {
 
   return `
     <section class="stats-grid">${cards.join('')}</section>
+    ${renderDashboardCharts(data)}
     <section class="panel">
       <div class="panel-head">
         <h2 class="panel-title">Atalhos</h2>
@@ -1410,6 +1411,31 @@ function stat(label, value, iconName, tone = '') {
   `;
 }
 
+function legendRow(label, value, percent, tone) {
+  return `
+    <div class="legend-row">
+      <span class="legend-dot ${tone}"></span>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <em>${percent}%</em>
+    </div>
+  `;
+}
+
+function barRow(label, value, percent, tone) {
+  return `
+    <div class="bar-row">
+      <div class="bar-meta">
+        <span>${escapeHtml(label)}</span>
+        <strong>${number(value)}</strong>
+      </div>
+      <div class="progress-track">
+        <span class="progress-fill ${tone}" style="width: ${percent}%"></span>
+      </div>
+    </div>
+  `;
+}
+
 function input(name, label, value = '', type = 'text', required = false, step = '') {
   return `
     <div class="field">
@@ -1448,6 +1474,117 @@ function selectWithCustom(name, label, value, items, required = false) {
         ${options.map(([itemValue, itemLabel]) => option(itemValue, itemLabel, value)).join('')}
       </select>
     </div>
+  `;
+}
+
+function renderDashboardCharts(data) {
+  const charts = [
+    renderReportsChart(data)
+  ];
+
+  if (data.colaboradoresAtivos !== null && data.colaboradoresAtivos !== undefined) {
+    charts.push(renderInventoryChart(data));
+  }
+
+  if (data.totalEntradas !== null && data.totalEntradas !== undefined) {
+    charts.unshift(renderFinanceChart(data));
+  }
+
+  return `<section class="dashboard-grid">${charts.join('')}</section>`;
+}
+
+function renderFinanceChart(data) {
+  const entradas = toFiniteNumber(data.totalEntradas);
+  const saidas = toFiniteNumber(data.totalSaidas);
+  const saldo = toFiniteNumber(data.saldoTotal);
+  const total = entradas + saidas;
+  const entradaPercent = total > 0 ? Math.round((entradas / total) * 100) : 0;
+  const saidaPercent = total > 0 ? 100 - entradaPercent : 0;
+  const entradaAngle = total > 0 ? (entradas / total) * 360 : 0;
+  const saldoTone = saldo >= 0 ? 'success' : 'danger';
+
+  return `
+    <article class="dashboard-card featured">
+      <div class="chart-head">
+        <div>
+          <h2 class="chart-title">Fluxo financeiro</h2>
+          <p class="chart-subtitle">Entradas, saídas e saldo atual</p>
+        </div>
+        ${icon('money')}
+      </div>
+      <div class="donut-layout">
+        <div class="donut-chart" style="--slice: ${entradaAngle}deg">
+          <div class="donut-center">
+            <span>Saldo</span>
+            <strong class="${saldoTone}">${money(saldo)}</strong>
+          </div>
+        </div>
+        <div class="chart-legend">
+          ${legendRow('Entradas', money(entradas), entradaPercent, 'success')}
+          ${legendRow('Saídas', money(saidas), saidaPercent, 'danger')}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderInventoryChart(data) {
+  const total = toFiniteNumber(data.carrosCadastrados);
+  const disponiveis = toFiniteNumber(data.carrosDisponiveis);
+  const outros = Math.max(total - disponiveis, 0);
+  const disponiveisPercent = total > 0 ? Math.round((disponiveis / total) * 100) : 0;
+  const outrosPercent = total > 0 ? 100 - disponiveisPercent : 0;
+
+  return `
+    <article class="dashboard-card">
+      <div class="chart-head">
+        <div>
+          <h2 class="chart-title">Estoque</h2>
+          <p class="chart-subtitle">Distribuição dos carros cadastrados</p>
+        </div>
+        ${icon('car')}
+      </div>
+      <div class="stacked-bar" aria-label="Carros disponíveis e indisponíveis">
+        <span class="stack success" style="width: ${disponiveisPercent}%"></span>
+        <span class="stack warning" style="width: ${outrosPercent}%"></span>
+      </div>
+      <div class="chart-legend compact">
+        ${legendRow('Disponíveis', number(disponiveis), disponiveisPercent, 'success')}
+        ${legendRow('Vendidos/manutenção', number(outros), outrosPercent, 'warning')}
+      </div>
+      <div class="mini-kpis">
+        <div><span>Total</span><strong>${number(total)}</strong></div>
+        <div><span>Equipe ativa</span><strong>${number(data.colaboradoresAtivos)}</strong></div>
+      </div>
+    </article>
+  `;
+}
+
+function renderReportsChart(data) {
+  const total = toFiniteNumber(data.meusRelatorios);
+  const pendentes = toFiniteNumber(data.meusRelatoriosPendentes);
+  const concluidos = Math.max(total - pendentes, 0);
+  const pendentesPercent = total > 0 ? Math.round((pendentes / total) * 100) : 0;
+  const concluidosPercent = total > 0 ? 100 - pendentesPercent : 0;
+
+  return `
+    <article class="dashboard-card">
+      <div class="chart-head">
+        <div>
+          <h2 class="chart-title">Relatórios</h2>
+          <p class="chart-subtitle">Acompanhamento das suas ocorrências</p>
+        </div>
+        ${icon('report')}
+      </div>
+      <div class="bar-list">
+        ${barRow('Pendentes', pendentes, pendentesPercent, 'warning')}
+        ${barRow('Concluídos', concluidos, concluidosPercent, 'success')}
+      </div>
+      <div class="mini-kpis">
+        <div><span>Total</span><strong>${number(total)}</strong></div>
+        <div><span>Resolvidos</span><strong>${number(concluidos)}</strong></div>
+      </div>
+    </article>
   `;
 }
 
@@ -1568,6 +1705,11 @@ function number(value) {
 
 function toNumber(value) {
   return value === '' || value === null || value === undefined ? null : Number(value);
+}
+
+function toFiniteNumber(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function today() {
