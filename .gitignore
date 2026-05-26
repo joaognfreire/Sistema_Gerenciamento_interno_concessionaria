@@ -2,7 +2,9 @@
 env
 *env
 target/
-backend/target/
-backend/.m2/
 uploads/
-backend/uploads/
+railway/target/
+railway/.m2/
+railway/uploads/
+.vercel/
+.railway/

@@ -1,16 +1,38 @@
-# Backend Java - Concessionaria
+# Backend Java - Railway
 
 API REST em Java/Spring Boot para o sistema interno da concessionaria. O front em HTML/CSS/JavaScript pode consumir todos os endpoints usando JSON e token Bearer.
+
+## Deploy na Railway
+
+Ao importar o repositorio na Railway, configure o servico com:
+
+- Root Directory: `railway`
+
+Variaveis obrigatorias:
+
+```env
+DB_HOST=...
+DB_PORT=...
+DB_USER=...
+DB_PASSWORD=...
+DB_NAME=concessionaria
+JWT_SECRET=troque-por-um-segredo-grande
+CORS_ALLOWED_ORIGINS=https://seu-site.vercel.app
+RAILPACK_JDK_VERSION=21
+```
+
+Depois gere um dominio publico no servico e use essa URL como `BACKEND_URL` no projeto da Vercel.
+Para manter fotos apos redeploys, crie um volume na Railway e configure `UPLOAD_DIR` com o caminho desse volume.
 
 ## Como rodar
 
 1. Crie o banco:
 
 ```bash
-mysql -u root -p < ../banco.sql
+mysql -u root -p < banco.sql
 ```
 
-2. Configure o `.env` na raiz do projeto:
+2. Configure o `.env` na raiz do repositorio:
 
 ```env
 DB_HOST=localhost
@@ -23,6 +45,18 @@ DB_NAME=concessionaria
 3. Rode o backend:
 
 ```bash
+cd railway
+mvn spring-boot:run
+```
+
+No PowerShell, carregue o `.env` antes de rodar:
+
+```powershell
+Get-Content ..\.env | ForEach-Object {
+  if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
+    [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim().Trim('"').Trim("'"), 'Process')
+  }
+}
 mvn spring-boot:run
 ```
 

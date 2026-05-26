@@ -1,9 +1,11 @@
-const API_DEFAULT = 'http://localhost:8080/api';
+const LOCAL_API_DEFAULT = 'http://localhost:8080/api';
+const PRODUCTION_API_DEFAULT = '/api';
+const API_DEFAULT = isLocalRuntime() ? LOCAL_API_DEFAULT : PRODUCTION_API_DEFAULT;
 const app = document.querySelector('#app');
 const toastRegion = document.querySelector('#toast-region');
 
 const state = {
-  apiBase: localStorage.getItem('apiBase') || API_DEFAULT,
+  apiBase: getInitialApiBase(),
   token: localStorage.getItem('token') || '',
   user: readJson(localStorage.getItem('user')),
   view: localStorage.getItem('view') || 'dashboard',
@@ -1543,6 +1545,20 @@ function assetUrl(url) {
   } catch {
     return url;
   }
+}
+
+function getInitialApiBase() {
+  const saved = localStorage.getItem('apiBase');
+  if (!saved) return API_DEFAULT;
+  if (!isLocalRuntime() && /localhost|127\.0\.0\.1/.test(saved)) return API_DEFAULT;
+  return saved;
+}
+
+function isLocalRuntime() {
+  const hostname = window.location.hostname;
+  return window.location.protocol === 'file:'
+    || hostname === 'localhost'
+    || hostname === '127.0.0.1';
 }
 
 function normalizeApiBase(value) {
