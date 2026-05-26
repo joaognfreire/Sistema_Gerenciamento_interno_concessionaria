@@ -152,9 +152,13 @@ document.addEventListener('change', (event) => {
 });
 
 document.addEventListener('input', (event) => {
-  const field = event.target.closest('[data-money]');
+  const field = event.target.closest('[data-money], [data-mask]');
   if (!field) return;
-  formatMoneyField(field);
+  if (field.dataset.money !== undefined) {
+    formatMoneyField(field);
+    return;
+  }
+  formatMaskedField(field);
 });
 
 async function handleForm(form) {
@@ -272,7 +276,7 @@ function renderLogin() {
         <form class="form-grid" data-form="login">
           <div class="field">
             <label for="cpf">CPF</label>
-            <input id="cpf" name="cpf" inputmode="numeric" autocomplete="username" required>
+            <input id="cpf" name="cpf" inputmode="numeric" autocomplete="username" data-mask="cpf" maxlength="14" required>
           </div>
           <div class="field">
             <label for="senha">Senha</label>
@@ -391,10 +395,10 @@ function renderColaboradores() {
   const rows = state.data.colaboradores.map((item) => `
     <tr>
       <td><strong>${escapeHtml(item.nome)}</strong></td>
-      <td>${escapeHtml(item.cpf)}</td>
+      <td>${escapeHtml(formatCpf(item.cpf))}</td>
       <td>${roleLabel(item.cargo)}</td>
       <td>${escapeHtml(item.email || '-')}</td>
-      <td>${escapeHtml(item.telefone || '-')}</td>
+      <td>${escapeHtml(formatPhone(item.telefone) || '-')}</td>
       <td>${money(item.salario)}</td>
       <td>${statusBadge(item.ativo ? 'Ativo' : 'Inativo', item.ativo ? 'success' : 'danger')}</td>
       <td>
@@ -641,7 +645,7 @@ function colaboradorModal() {
     <form id="modalForm" class="form-grid two" data-form="colaborador">
       ${hidden('id', item.id)}
       ${input('nome', 'Nome', item.nome, 'text', true)}
-      ${input('cpf', 'CPF', item.cpf, 'text', true)}
+      ${cpfInput('cpf', 'CPF', item.cpf, true)}
       ${input('senha', editing ? 'Senha nova' : 'Senha', '', 'password', !editing)}
       ${select('cargo', 'Cargo', item.cargo || 'COLABORADOR', [
         ['COLABORADOR', 'Colaborador'],
@@ -650,7 +654,7 @@ function colaboradorModal() {
         ['DONO', 'Dono']
       ])}
       ${input('email', 'Email', item.email, 'email', true)}
-      ${input('telefone', 'Telefone', item.telefone)}
+      ${phoneInput('telefone', 'Telefone', item.telefone)}
       ${input('dataNascimento', 'Nascimento', item.dataNascimento, 'date')}
       ${input('dataAdmissao', 'Admissão', item.dataAdmissao || today(), 'date', true)}
       ${moneyInput('salario', 'Salário', item.salario ?? 0, true)}
@@ -859,7 +863,7 @@ async function submitLogin(form) {
   localStorage.setItem('apiBase', state.apiBase);
   const response = await request('/auth/login', {
     method: 'POST',
-    body: { cpf: data.cpf, senha: data.senha },
+    body: { cpf: formatCpf(data.cpf), senha: data.senha },
     auth: false
   });
   state.token = response.token;
@@ -877,11 +881,11 @@ async function submitColaborador(form) {
   const data = formData(form);
   const payload = {
     nome: data.nome,
-    cpf: data.cpf,
+    cpf: formatCpf(data.cpf),
     senha: data.senha,
     cargo: data.cargo,
     email: data.email,
-    telefone: data.telefone,
+    telefone: formatPhone(data.telefone),
     dataNascimento: data.dataNascimento || null,
     dataAdmissao: data.dataAdmissao,
     salario: toNumber(data.salario)
@@ -1460,6 +1464,24 @@ function moneyInput(name, label, value = '', required = false) {
   `;
 }
 
+function cpfInput(name, label, value = '', required = false) {
+  return `
+    <div class="field">
+      <label for="${name}">${label}</label>
+      <input id="${name}" name="${name}" type="text" inputmode="numeric" autocomplete="off" data-mask="cpf" maxlength="14" value="${escapeAttr(formatCpf(value))}" ${required ? 'required' : ''}>
+    </div>
+  `;
+}
+
+function phoneInput(name, label, value = '', required = false) {
+  return `
+    <div class="field">
+      <label for="${name}">${label}</label>
+      <input id="${name}" name="${name}" type="text" inputmode="tel" autocomplete="tel" data-mask="phone" maxlength="15" value="${escapeAttr(formatPhone(value))}" ${required ? 'required' : ''}>
+    </div>
+  `;
+}
+
 function hidden(name, value) {
   return value ? `<input type="hidden" name="${name}" value="${escapeAttr(value)}">` : '';
 }
@@ -1807,6 +1829,56 @@ function formatMoneyTyping(value) {
   const formattedInteger = integerPart ? integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
   if (hasComma) return `${formattedInteger || '0'},${decimalPart}`;
   return formattedInteger;
+}
+
+function formatMaskedField(field) {
+  const cursor = field.selectionStart ?? field.value.length;
+  const digitPosition = onlyDigits(field.value.slice(0, cursor)).length;
+  if (field.dataset.mask === 'cpf') field.value = formatCpf(field.value);
+  if (field.dataset.mask === 'phone') field.value = formatPhone(field.value);
+  restoreDigitCaret(field, digitPosition);
+}
+
+function restoreDigitCaret(field, digitPosition) {
+  if (typeof field.setSelectionRange !== 'function') return;
+  if (digitPosition === 0) {
+    field.setSelectionRange(0, 0);
+    return;
+  }
+
+  let seen = 0;
+  for (let index = 0; index < field.value.length; index += 1) {
+    if (/\d/.test(field.value[index])) seen += 1;
+    if (seen >= digitPosition) {
+      field.setSelectionRange(index + 1, index + 1);
+      return;
+    }
+  }
+  field.setSelectionRange(field.value.length, field.value.length);
+}
+
+function formatCpf(value) {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatPhone(value) {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (!digits) return '';
+  if (digits.length <= 2) return `(${digits}`;
+
+  const ddd = digits.slice(0, 2);
+  const numberPart = digits.slice(2);
+  if (numberPart.length <= 4) return `(${ddd}) ${numberPart}`;
+  if (numberPart.length <= 8) return `(${ddd}) ${numberPart.slice(0, 4)}-${numberPart.slice(4)}`;
+  return `(${ddd}) ${numberPart.slice(0, 5)}-${numberPart.slice(5)}`;
+}
+
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '');
 }
 
 function today() {
