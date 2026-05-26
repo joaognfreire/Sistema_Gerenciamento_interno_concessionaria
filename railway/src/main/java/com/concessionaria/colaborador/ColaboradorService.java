@@ -1,6 +1,7 @@
 package com.concessionaria.colaborador;
 
 import com.concessionaria.common.ApiException;
+import com.concessionaria.common.BrazilianCpf;
 import com.concessionaria.common.TextNormalizer;
 import com.concessionaria.security.AuthenticatedUser;
 import com.concessionaria.security.Cargo;
@@ -83,6 +84,8 @@ public class ColaboradorService {
     @Transactional
     public ColaboradorDtos.ColaboradorResponse create(ColaboradorDtos.CreateColaboradorRequest request) {
         permissionService.requireRole(Cargo.GERENTE);
+        String cpf = normalizeCpf(request.cpf());
+        ensureCpfAvailable(cpf, null);
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
@@ -93,7 +96,7 @@ public class ColaboradorService {
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, findCargoId(request.cargo()));
             ps.setString(2, request.nome().trim());
-            ps.setString(3, request.cpf().trim());
+            ps.setString(3, cpf);
             ps.setString(4, emptyToNull(request.email()));
             ps.setString(5, emptyToNull(request.telefone()));
             ps.setString(6, passwordService.encode(request.senha()));
@@ -110,6 +113,8 @@ public class ColaboradorService {
     public ColaboradorDtos.ColaboradorResponse update(Long id, ColaboradorDtos.UpdateColaboradorRequest request) {
         permissionService.requireRole(Cargo.GERENTE);
         ensureExists(id);
+        String cpf = normalizeCpf(request.cpf());
+        ensureCpfAvailable(cpf, id);
 
         if (!TextNormalizer.hasText(request.senha())) {
             jdbcTemplate.update("""
@@ -119,7 +124,7 @@ public class ColaboradorService {
                     WHERE id_colaborador = ?
                     """,
                     request.nome().trim(),
-                    request.cpf().trim(),
+                    cpf,
                     findCargoId(request.cargo()),
                     emptyToNull(request.email()),
                     emptyToNull(request.telefone()),
@@ -137,7 +142,7 @@ public class ColaboradorService {
                     WHERE id_colaborador = ?
                     """,
                     request.nome().trim(),
-                    request.cpf().trim(),
+                    cpf,
                     passwordService.encode(request.senha()),
                     findCargoId(request.cargo()),
                     emptyToNull(request.email()),
@@ -192,6 +197,36 @@ public class ColaboradorService {
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Cargo nao cadastrado no banco: " + cargo.dbValue()));
+    }
+
+    private String normalizeCpf(String value) {
+        if (!BrazilianCpf.isValid(value)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CPF invalido.");
+        }
+        return BrazilianCpf.digits(value);
+    }
+
+    private void ensureCpfAvailable(String cpf, Long ignoredId) {
+        String cpfDigits = BrazilianCpf.digits(cpf);
+        Integer count;
+        if (ignoredId == null) {
+            count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*)
+                    FROM colaborador
+                    WHERE REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                    """, Integer.class, cpfDigits);
+        } else {
+            count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*)
+                    FROM colaborador
+                    WHERE REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = ?
+                      AND id_colaborador <> ?
+                    """, Integer.class, cpfDigits, ignoredId);
+        }
+
+        if (count != null && count > 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CPF ja cadastrado.");
+        }
     }
 
     private String emptyToNull(String value) {

@@ -21,6 +21,7 @@ public class ApiInfoController {
                         "/api/auth/me",
                         "/api/dashboard",
                         "/api/colaboradores",
+                        "/api/verificacoes/cpf",
                         "/api/carros",
                         "/api/relatorios",
                         "/api/financeiro"

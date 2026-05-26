@@ -863,7 +863,7 @@ async function submitLogin(form) {
   localStorage.setItem('apiBase', state.apiBase);
   const response = await request('/auth/login', {
     method: 'POST',
-    body: { cpf: formatCpf(data.cpf), senha: data.senha },
+    body: { cpf: onlyDigits(data.cpf), senha: data.senha },
     auth: false
   });
   state.token = response.token;
@@ -881,7 +881,7 @@ async function submitColaborador(form) {
   const data = formData(form);
   const payload = {
     nome: data.nome,
-    cpf: formatCpf(data.cpf),
+    cpf: onlyDigits(data.cpf),
     senha: data.senha,
     cargo: data.cargo,
     email: data.email,
