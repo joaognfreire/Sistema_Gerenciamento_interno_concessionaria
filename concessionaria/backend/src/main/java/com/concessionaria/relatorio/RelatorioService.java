@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +32,17 @@ public class RelatorioService {
         this.permissionService = permissionService;
     }
 
-    public List<RelatorioDtos.RelatorioResponse> list(StatusRelatorio status) {
+    public List<RelatorioDtos.RelatorioResponse> list(StatusRelatorio status, Boolean apagado) {
         AuthenticatedUser user = permissionService.requireAuthenticated();
         boolean manager = user.cargo().atLeast(Cargo.GERENTE);
 
-        StringBuilder sql = new StringBuilder(baseSelect() + " WHERE 1 = 1 ");
-        java.util.ArrayList<Object> params = new java.util.ArrayList<>();
+        if (Boolean.TRUE.equals(apagado) && !manager) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Apenas Gerente ou superior pode visualizar relatorios apagados.");
+        }
+
+        StringBuilder sql = new StringBuilder(baseSelect() + " WHERE r.apagado = ? ");
+        ArrayList<Object> params = new ArrayList<>();
+        params.add(Boolean.TRUE.equals(apagado));
 
         if (!manager) {
             sql.append(" AND r.id_colaborador = ? ");
@@ -54,7 +60,7 @@ public class RelatorioService {
 
     public RelatorioDtos.RelatorioResponse findById(Long id) {
         AuthenticatedUser user = permissionService.requireAuthenticated();
-        RelatorioDtos.RelatorioResponse response = jdbcTemplate.query(baseSelect() + " WHERE r.id = ?",
+        RelatorioDtos.RelatorioResponse response = jdbcTemplate.query(baseSelect() + " WHERE r.id_relatorio = ?",
                         (rs, rowNum) -> mapRow(rs), id)
                 .stream()
                 .findFirst()
@@ -76,8 +82,8 @@ public class RelatorioService {
             counters.put(status, 0L);
         }
 
-        String sql = "SELECT status, COUNT(*) total FROM relatorio " +
-                (manager ? "" : "WHERE id_colaborador = ? ") +
+        String sql = "SELECT status, COUNT(*) total FROM relatorio WHERE apagado = FALSE " +
+                (manager ? "" : "AND id_colaborador = ? ") +
                 "GROUP BY status";
 
         Object[] params = manager ? new Object[]{} : new Object[]{user.id()};
@@ -116,6 +122,31 @@ public class RelatorioService {
     }
 
     @Transactional
+    public RelatorioDtos.RelatorioResponse update(Long id, RelatorioDtos.UpdateRelatorioRequest request) {
+        permissionService.requireRole(Cargo.GERENTE);
+        findById(id);
+        if (request.carroId() != null) {
+            ensureCarExists(request.carroId());
+        }
+
+        jdbcTemplate.update("""
+                UPDATE relatorio
+                SET id_veiculo = ?, titulo = ?, descricao = ?, categoria = ?, prioridade = ?, status = ?
+                WHERE id_relatorio = ?
+                """,
+                request.carroId(),
+                request.titulo().trim(),
+                request.descricao().trim(),
+                request.categoria().trim(),
+                request.prioridade().dbValue(),
+                request.status().dbValue(),
+                id
+        );
+
+        return findById(id);
+    }
+
+    @Transactional
     public RelatorioDtos.RelatorioResponse updateStatus(Long id, StatusRelatorio status) {
         permissionService.requireRole(Cargo.GERENTE);
         findById(id);
@@ -130,7 +161,7 @@ public class RelatorioService {
 
     @Transactional
     public RelatorioDtos.RelatorioResponse responder(Long id, String resposta) {
-        AuthenticatedUser user = permissionService.requireOwner();
+        AuthenticatedUser user = permissionService.requireRole(Cargo.GERENTE);
         findById(id);
 
         if (!TextNormalizer.hasText(resposta)) {
@@ -154,6 +185,26 @@ public class RelatorioService {
         return findById(id);
     }
 
+    @Transactional
+    public void delete(Long id) {
+        AuthenticatedUser user = permissionService.requireAuthenticated();
+        RelatorioDtos.RelatorioResponse relatorio = findById(id);
+
+        if (!Objects.equals(relatorio.autorId(), user.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Voce so pode apagar relatorios criados por voce.");
+        }
+
+        if (relatorio.resposta() != null && !relatorio.resposta().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Relatorios com resposta nao podem ser apagados pelo autor.");
+        }
+
+        jdbcTemplate.update("""
+                UPDATE relatorio
+                SET apagado = TRUE, apagado_em = ?, apagado_por_id = ?
+                WHERE id_relatorio = ?
+                """, Timestamp.valueOf(LocalDateTime.now()), user.id(), id);
+    }
+
     private String baseSelect() {
         return """
                 SELECT r.id_relatorio AS id, r.titulo, r.descricao, r.categoria, r.prioridade, r.status,
@@ -162,10 +213,12 @@ public class RelatorioService {
                        CASE WHEN v.id_veiculo IS NULL THEN NULL ELSE CONCAT(v.marca, ' ', v.modelo, ' - ', v.placa) END AS carro_resumo,
                        resposta.mensagem AS resposta, resposta.id_colaborador AS respondido_por_id,
                        respondente.nome AS respondido_por_nome, resposta.data_resposta AS respondido_em,
+                       r.apagado, r.apagado_por_id, apagador.nome AS apagado_por_nome, r.apagado_em,
                        r.criado_em, r.atualizado_em
                 FROM relatorio r
                 JOIN colaborador autor ON autor.id_colaborador = r.id_colaborador
                 LEFT JOIN veiculo v ON v.id_veiculo = r.id_veiculo
+                LEFT JOIN colaborador apagador ON apagador.id_colaborador = r.apagado_por_id
                 LEFT JOIN resposta_relatorio resposta ON resposta.id_resposta = (
                     SELECT rr.id_resposta
                     FROM resposta_relatorio rr
@@ -193,6 +246,10 @@ public class RelatorioService {
                 rs.getObject("respondido_por_id") == null ? null : rs.getLong("respondido_por_id"),
                 rs.getString("respondido_por_nome"),
                 rs.getTimestamp("respondido_em") == null ? null : rs.getTimestamp("respondido_em").toLocalDateTime(),
+                rs.getBoolean("apagado"),
+                rs.getObject("apagado_por_id") == null ? null : rs.getLong("apagado_por_id"),
+                rs.getString("apagado_por_nome"),
+                rs.getTimestamp("apagado_em") == null ? null : rs.getTimestamp("apagado_em").toLocalDateTime(),
                 rs.getTimestamp("criado_em") == null ? null : rs.getTimestamp("criado_em").toLocalDateTime(),
                 rs.getTimestamp("atualizado_em") == null ? null : rs.getTimestamp("atualizado_em").toLocalDateTime()
         );

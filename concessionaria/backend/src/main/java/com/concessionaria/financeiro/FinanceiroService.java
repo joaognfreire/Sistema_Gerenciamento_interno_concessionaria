@@ -15,6 +15,8 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -34,11 +36,12 @@ public class FinanceiroService {
         return resumoInterno();
     }
 
-    public List<FinanceiroDtos.RegistroFinanceiroResponse> list(TipoFinanceiro tipo) {
+    public List<FinanceiroDtos.RegistroFinanceiroResponse> list(TipoFinanceiro tipo, Boolean apagado) {
         permissionService.requireRole(Cargo.GERENTE_FINANCEIRO);
 
-        StringBuilder sql = new StringBuilder(baseSelect() + " WHERE 1 = 1 ");
+        StringBuilder sql = new StringBuilder(baseSelect() + " WHERE f.apagado = ? ");
         List<Object> params = new ArrayList<>();
+        params.add(Boolean.TRUE.equals(apagado));
 
         if (tipo != null) {
             sql.append(" AND f.tipo = ? ");
@@ -77,16 +80,67 @@ public class FinanceiroService {
         return findById(id);
     }
 
+    @Transactional
+    public FinanceiroDtos.RegistroFinanceiroResponse update(Long id, FinanceiroDtos.UpdateRegistroFinanceiroRequest request) {
+        permissionService.requireRole(Cargo.GERENTE_FINANCEIRO);
+        findById(id);
+        if (request.carroId() != null) {
+            ensureCarExists(request.carroId());
+        }
+
+        jdbcTemplate.update("""
+                UPDATE financeiro
+                SET id_veiculo = ?, tipo = ?, categoria = ?, descricao = ?, valor = ?, data_movimento = ?
+                WHERE id_financeiro = ?
+                """,
+                request.carroId(),
+                request.tipo().dbValue(),
+                request.categoria().trim(),
+                request.descricao().trim(),
+                request.valor(),
+                Date.valueOf(request.dataMovimento()),
+                id
+        );
+
+        return findById(id);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        AuthenticatedUser user = permissionService.requireRole(Cargo.GERENTE_FINANCEIRO);
+        findById(id);
+
+        jdbcTemplate.update("""
+                UPDATE financeiro
+                SET apagado = TRUE, apagado_em = ?, apagado_por_id = ?
+                WHERE id_financeiro = ?
+                """, Timestamp.valueOf(LocalDateTime.now()), user.id(), id);
+    }
+
+    @Transactional
+    public FinanceiroDtos.RegistroFinanceiroResponse restore(Long id) {
+        permissionService.requireRole(Cargo.GERENTE_FINANCEIRO);
+        findById(id);
+
+        jdbcTemplate.update("""
+                UPDATE financeiro
+                SET apagado = FALSE, apagado_em = NULL, apagado_por_id = NULL
+                WHERE id_financeiro = ?
+                """, id);
+
+        return findById(id);
+    }
+
     public FinanceiroDtos.ResumoFinanceiroResponse resumoInterno() {
         BigDecimal entradas = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(valor), 0)
                 FROM financeiro
-                WHERE tipo = 'Entrada'
+                WHERE tipo = 'Entrada' AND apagado = FALSE
                 """, BigDecimal.class);
         BigDecimal saidas = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(valor), 0)
                 FROM financeiro
-                WHERE tipo = 'Saida'
+                WHERE tipo = 'Saida' AND apagado = FALSE
                 """, BigDecimal.class);
 
         entradas = entradas == null ? BigDecimal.ZERO : entradas;
@@ -107,9 +161,11 @@ public class FinanceiroService {
                        f.id_colaborador AS responsavel_id, responsavel.nome AS responsavel_nome,
                        f.id_veiculo AS carro_id,
                        CASE WHEN v.id_veiculo IS NULL THEN NULL ELSE CONCAT(v.marca, ' ', v.modelo, ' - ', v.placa) END AS carro_resumo,
+                       f.apagado, f.apagado_por_id, apagador.nome AS apagado_por_nome, f.apagado_em,
                        f.criado_em, f.atualizado_em
                 FROM financeiro f
                 JOIN colaborador responsavel ON responsavel.id_colaborador = f.id_colaborador
+                LEFT JOIN colaborador apagador ON apagador.id_colaborador = f.apagado_por_id
                 LEFT JOIN veiculo v ON v.id_veiculo = f.id_veiculo
                 """;
     }
@@ -126,6 +182,10 @@ public class FinanceiroService {
                 rs.getString("responsavel_nome"),
                 rs.getObject("carro_id") == null ? null : rs.getLong("carro_id"),
                 rs.getString("carro_resumo"),
+                rs.getBoolean("apagado"),
+                rs.getObject("apagado_por_id") == null ? null : rs.getLong("apagado_por_id"),
+                rs.getString("apagado_por_nome"),
+                rs.getTimestamp("apagado_em") == null ? null : rs.getTimestamp("apagado_em").toLocalDateTime(),
                 rs.getTimestamp("criado_em") == null ? null : rs.getTimestamp("criado_em").toLocalDateTime(),
                 rs.getTimestamp("atualizado_em") == null ? null : rs.getTimestamp("atualizado_em").toLocalDateTime()
         );

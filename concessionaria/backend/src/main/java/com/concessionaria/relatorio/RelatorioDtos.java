@@ -25,6 +25,10 @@ public final class RelatorioDtos {
             Long respondidoPorId,
             String respondidoPorNome,
             LocalDateTime respondidoEm,
+            Boolean apagado,
+            Long apagadoPorId,
+            String apagadoPorNome,
+            LocalDateTime apagadoEm,
             LocalDateTime criadoEm,
             LocalDateTime atualizadoEm
     ) {
@@ -42,6 +46,26 @@ public final class RelatorioDtos {
 
             @NotNull(message = "Prioridade e obrigatoria")
             PrioridadeRelatorio prioridade,
+
+            Long carroId
+    ) {
+    }
+
+    public record UpdateRelatorioRequest(
+            @NotBlank(message = "Titulo e obrigatorio")
+            String titulo,
+
+            @NotBlank(message = "Descricao e obrigatoria")
+            String descricao,
+
+            @NotBlank(message = "Categoria e obrigatoria")
+            String categoria,
+
+            @NotNull(message = "Prioridade e obrigatoria")
+            PrioridadeRelatorio prioridade,
+
+            @NotNull(message = "Status e obrigatorio")
+            StatusRelatorio status,
 
             Long carroId
     ) {

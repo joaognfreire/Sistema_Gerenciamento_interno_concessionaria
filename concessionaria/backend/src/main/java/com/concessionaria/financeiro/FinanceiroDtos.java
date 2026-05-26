@@ -23,12 +23,37 @@ public final class FinanceiroDtos {
             String responsavelNome,
             Long carroId,
             String carroResumo,
+            Boolean apagado,
+            Long apagadoPorId,
+            String apagadoPorNome,
+            LocalDateTime apagadoEm,
             LocalDateTime criadoEm,
             LocalDateTime atualizadoEm
     ) {
     }
 
     public record CreateRegistroFinanceiroRequest(
+            @NotNull(message = "Tipo e obrigatorio")
+            TipoFinanceiro tipo,
+
+            @NotBlank(message = "Categoria e obrigatoria")
+            String categoria,
+
+            @NotBlank(message = "Descricao e obrigatoria")
+            String descricao,
+
+            @NotNull(message = "Valor e obrigatorio")
+            @DecimalMin(value = "0.01", inclusive = true, message = "Valor deve ser maior que zero")
+            BigDecimal valor,
+
+            @NotNull(message = "Data e obrigatoria")
+            LocalDate dataMovimento,
+
+            Long carroId
+    ) {
+    }
+
+    public record UpdateRegistroFinanceiroRequest(
             @NotNull(message = "Tipo e obrigatorio")
             TipoFinanceiro tipo,
 

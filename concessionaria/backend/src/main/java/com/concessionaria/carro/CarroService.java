@@ -74,6 +74,10 @@ public class CarroService {
     @Transactional
     public CarroDtos.CarroResponse create(CarroDtos.CarroRequest request, List<MultipartFile> fotos) {
         AuthenticatedUser user = permissionService.requireRole(Cargo.GERENTE);
+        if (fotos == null || fotos.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Adicione pelo menos uma imagem antes de cadastrar o veiculo.");
+        }
+        ensureUniqueFields(request, null);
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
@@ -97,6 +101,7 @@ public class CarroService {
     public CarroDtos.CarroResponse update(Long id, CarroDtos.CarroRequest request, List<MultipartFile> novasFotos) {
         AuthenticatedUser user = permissionService.requireRole(Cargo.GERENTE);
         ensureExists(id);
+        ensureUniqueFields(request, id);
 
         jdbcTemplate.update("""
                 UPDATE veiculo
@@ -155,10 +160,15 @@ public class CarroService {
         permissionService.requireRole(Cargo.GERENTE);
         ensureExists(id);
 
-        for (CarroDtos.FotoResponse foto : findPhotos(id)) {
+        List<CarroDtos.FotoResponse> fotos = findPhotos(id);
+        jdbcTemplate.update("UPDATE financeiro SET id_veiculo = NULL WHERE id_veiculo = ?", id);
+        jdbcTemplate.update("UPDATE relatorio SET id_veiculo = NULL WHERE id_veiculo = ?", id);
+        jdbcTemplate.update("DELETE FROM venda WHERE id_veiculo = ?", id);
+        jdbcTemplate.update("DELETE FROM veiculo WHERE id_veiculo = ?", id);
+
+        for (CarroDtos.FotoResponse foto : fotos) {
             fileStorageService.deleteByUrl(foto.url());
         }
-        jdbcTemplate.update("DELETE FROM veiculo WHERE id_veiculo = ?", id);
     }
 
     private void savePhotos(Long carroId, List<MultipartFile> fotos) {
@@ -334,6 +344,32 @@ public class CarroService {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM veiculo WHERE id_veiculo = ?", Integer.class, id);
         if (count == null || count == 0) {
             throw new ApiException(HttpStatus.NOT_FOUND, "Carro nao encontrado.");
+        }
+    }
+
+    private void ensureUniqueFields(CarroDtos.CarroRequest request, Long currentId) {
+        ensureUnique("placa", request.placa(), currentId, "Ja existe um carro cadastrado com esta placa.");
+        ensureUnique("chassi", request.chassi(), currentId, "Ja existe um carro cadastrado com este chassi.");
+        ensureUnique("renavam", request.renavam(), currentId, "Ja existe um carro cadastrado com este renavam.");
+    }
+
+    private void ensureUnique(String column, String value, Long currentId, String message) {
+        if (!TextNormalizer.hasText(value)) {
+            return;
+        }
+
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM veiculo WHERE LOWER(" + column + ") = LOWER(?)");
+        List<Object> params = new ArrayList<>();
+        params.add(value.trim());
+
+        if (currentId != null) {
+            sql.append(" AND id_veiculo <> ?");
+            params.add(currentId);
+        }
+
+        Integer count = jdbcTemplate.queryForObject(sql.toString(), Integer.class, params.toArray());
+        if (count != null && count > 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, message);
         }
     }
 
